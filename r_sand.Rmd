@@ -1,0 +1,47 @@
+---
+title: "R_sandbox"
+author: "Laide Abbas Rasaki"
+date: "3/10/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## An R Introduction.
+
+This is a R Markdown file to learn a bit of R:
+
+```{r cars}
+summary(cars)
+```
+
+## loading external data
+
+```{r }
+data<-read.csv("mouse.csv")
+data<-data[-1,]
+plot(data[,1],main = "plot")
+image(as.matrix(data[,2:15]),col=c("red","blue"),main="Mouse Data",ylab="Markers",xlab="Individual")
+reg1<-lm(BW~M1,data=data);reg1
+summary(reg1)
+plot(BW~M1,data=data)
+
+```
+
+
+```{r}
+for(i in 2:15){
+  print(table(data[,i]))
+}
+
+i<-2
+while(i<15){
+  print(table(data[,i]))
+  i<-i+1
+}
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
