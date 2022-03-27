@@ -1,0 +1,103 @@
+---
+title: "Mapping Population"
+author: "Laide Abbas Rasaki"
+date: "3/27/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Chi-square test for mouse
+**Data Importation and tidying**
+The Mouse data was imported using the read.csv() function and the data was tidied using the subset() function of the dplyr package.
+
+```{r Data Mouse,echo=TRUE,results='hide',warning=FALSE}
+library(dplyr)
+Ms<-read.csv("mouse.csv",header=T)
+Ms<-Ms[-c(1),]
+attach(Ms)
+Ms<-subset(Ms,select=-BW);Ms
+detach(Ms)
+```
+
+**chi-square analysis of the p-value from the mouse data**
+Since its a backcross the expected genotype ratio is 2:2 which means 50%:50%.
+
+```{r chi-square, echo=TRUE}
+exp<-c(0.5,0.5)
+p.value<-rep(NA,14)
+for (m in 1:14){
+  obs<- table( Ms[,m] )
+  p.value[m]<-chisq.test(x=obs,p=exp,correct=T)$p.value
+}
+p.value[m]
+```
+
+**Heatmap of the marker from mouse data**
+This was created with the marker and the individual data from the mouse data
+
+```{r Heatmap, echo=TRUE,warning=FALSE}
+image(as.matrix(Ms),ylab="Markers",Xlab="Individual",col=c("yellow","blue"))
+```
+
+**Plot of the p-vaues obtained for each marker with abline at normal and bonferroni corrected significance level** 
+The output with the bonferroni correction shows that the marker loci segregated as expected for the mouse data.
+
+```{r plots, echo=TRUE}
+table(p.value<0.05)
+table(p.value<0.05/14)
+plot(sort(p.value))
+abline(h = c(0.05, 0.05/14), col = c("red", "blue"))
+legend("topleft", legend=c("alpha = 0.05", "alpha* = 0.05/14"), col=c("red", "blue"), lty=1)
+
+```
+
+## Chi-square test for maize
+**Data Importation and tidying**
+The Maize data was imported using the read.csv() function and the data was tidied using the [] operator.
+
+```{r}
+Ma<-read.csv("maize.csv",header=T)
+Ma<-Ma[-c(1,14)]
+```
+
+**chi-square analysis of the p-value from the mouse data**
+Since its a F2 population the expected genotype ratio is 1:2:1 which means 25%:50%:25%.
+
+```{r}
+exp<-c(0.25,0.5,0.25)
+p.value<-rep(NA,12)
+for (n in 1:12){
+  obs<- table( Ma[,n] )
+  p.value[n]<-chisq.test(x=obs,p=exp,correct=T)$p.value
+}
+p.value[n]
+```
+
+**Heatmap of the marker from maize data**
+This was created with the marker and the individual data from the mouse data
+
+```{r,warning=FALSE}
+image(as.matrix(Ms),ylab="Markers",Xlab="Individual",col=c("yellow","blue"))
+```
+
+**Plot of the p-vaues obtained for each marker with abline at normal and bonferroni corrected significance level** 
+
+```{r}
+table(p.value<0.05)
+table(p.value<0.05/12)
+plot(sort(p.value))
+abline(h = c(0.05, 0.05/12), col = c("red", "blue"))
+legend("topleft", legend=c("alpha = 0.05", "alpha* = 0.05/12"), col=c("red", "blue"), lty=1)
+```
+
+
+
+
+
+
+
+
+
