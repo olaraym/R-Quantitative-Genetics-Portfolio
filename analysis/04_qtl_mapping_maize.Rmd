@@ -1,0 +1,164 @@
+---
+title: "QTL Mapping of Plant Height in Maize"
+subtitle: "Single-marker analysis, interval mapping, composite interval mapping and multiple-QTL models with R/qtl"
+author: "Laide Abbas Rasaki"
+date: "First written May 2022 · revised November 2026"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+```{r setup, include = FALSE}
+library(qtl)
+data_file <- "../data/maize_mds.RData"
+has_data  <- file.exists(data_file)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, eval = has_data)
+set.seed(2022)
+```
+
+```{r data-note, eval = !has_data, echo = FALSE, results = "asis"}
+cat("> **Note:** this page shows the analysis code only. The R/qtl cross object",
+    "(`data/maize_mds.RData`) is not in the repository, so the chunks were not run.\n")
+```
+
+# Overview
+
+A **quantitative trait locus (QTL)** is a region of the genome that explains part of the variation in a quantitative trait, here plant height in a maize mapping population. This report compares four methods of increasing power:
+
+| Method | Idea | R/qtl function |
+|---|---|---|
+| Single-marker analysis (SMA) | Test each marker on its own | `scanone(method = "mr")` |
+| Interval mapping (IM) | Also test positions *between* markers using genotype probabilities | `scanone(method = "hk")` |
+| Composite interval mapping (CIM) | IM plus marker cofactors that absorb other QTL | `cim()` |
+| Multiple-QTL mapping (MIM) | Fit several QTL and their interactions together | `fitqtl()`, `refineqtl()`, `stepwiseqtl()` |
+
+Significance thresholds come from **1,000 permutations**. These control the genome-wide type I error at α = 0.05.
+
+# Genetic map
+
+```{r map}
+load(data_file)
+summaryMap(maize.mds)
+plotMap(maize.mds)
+plotRF(maize.mds, col.scheme = "redblue")
+```
+
+# Single-marker analysis
+
+```{r sma}
+maize.mr <- scanone(maize.mds, pheno.col = "PlantHeight", method = "mr")
+maize.perm.mr <- scanone(maize.mds, pheno.col = "PlantHeight", method = "mr",
+                         n.perm = 1000, verbose = FALSE)
+plot(maize.mr, type = "p", main = "Single-marker analysis (SMA)")
+add.threshold(maize.mr, perms = maize.perm.mr, alpha = 0.05, lty = 2)
+knitr::kable(summary(maize.mr, perms = maize.perm.mr, alpha = 0.05))
+```
+
+# Interval mapping (Haley-Knott regression)
+
+```{r im}
+maize.mds <- calc.genoprob(maize.mds, step = 1)
+maize.im <- scanone(maize.mds, pheno.col = "PlantHeight", method = "hk")
+maize.perm.im <- scanone(maize.mds, pheno.col = "PlantHeight", method = "hk",
+                         n.perm = 1000, verbose = FALSE)
+
+plot(maize.mr, maize.im, type = c("p", "l"), col = c("black", "red"), main = "SMA versus IM")
+add.threshold(maize.mr, perms = maize.perm.mr, alpha = 0.05, lty = 2, col = "black")
+add.threshold(maize.im, perms = maize.perm.im, alpha = 0.05, col = "red")
+legend("topright", legend = c("SMA", "IM"), lty = c(2, 1), col = c("black", "red"))
+
+maize.im.sig <- summary(maize.im, perms = maize.perm.im, alpha = 0.05)
+knitr::kable(maize.im.sig)
+```
+
+## Effects of the IM peaks
+
+```{r im-fit}
+maize.mds <- sim.geno(maize.mds, step = 1)
+maize.im.qtl <- makeqtl(maize.mds, chr = maize.im.sig$chr, pos = maize.im.sig$pos)
+maize.im.fit <- fitqtl(maize.mds, pheno.col = "PlantHeight", qtl = maize.im.qtl,
+                       formula = y ~ Q1 + Q2, get.ests = TRUE)
+summary(maize.im.fit)
+```
+
+# Composite interval mapping
+
+Window sizes of 10, 15, 20 cM and the whole chromosome were compared, with 2√n marker cofactors.
+
+```{r cim}
+n_cov <- 2 * sqrt(nind(maize.mds))
+cim_ws <- lapply(c(10, 15, 20, Inf), function(ws)
+  cim(maize.mds, pheno.col = "PlantHeight", method = "hk", n.marcovar = n_cov, window = ws))
+names(cim_ws) <- c("ws10", "ws15", "ws20", "wsInf")
+
+maize.perm.cim <- cim(maize.mds, pheno.col = "PlantHeight", method = "hk",
+                      n.marcovar = n_cov, window = Inf, n.perm = 1000)
+
+plot(maize.im, cim_ws$ws15, cim_ws$ws20, col = c("red", "blue", "green"), main = "IM versus CIM")
+add.threshold(maize.im, perms = maize.perm.im, alpha = 0.05, col = "red")
+add.threshold(cim_ws$ws10, perms = maize.perm.cim, alpha = 0.05)
+add.cim.covar(cim_ws$ws20, col = "green")
+legend("topright", c("IM", "CIM (ws = 15)", "CIM (ws = 20)"), lty = 1, col = c("red", "blue", "green"))
+
+knitr::kable(summary(cim_ws$ws20, perms = maize.perm.cim, alpha = 0.05))
+```
+
+# Multiple-QTL model
+
+## Starting model from CIM peaks
+
+```{r mim-start}
+maize.mds <- calc.genoprob(maize.mds, step = 1)
+maize.qtl <- makeqtl(maize.mds, chr = c(2, 7, 7, 10), pos = c(80.0, 110.0, 111, 69.4))
+maize.ref <- refineqtl(maize.mds, pheno.col = "PlantHeight", qtl = maize.qtl,
+                       formula = y ~ Q1 + Q2 + Q3 + Q4, verbose = FALSE)
+plotLodProfile(maize.ref)
+summary(fitqtl(maize.mds, pheno.col = "PlantHeight", qtl = maize.ref,
+               formula = y ~ Q1 + Q2 + Q3 + Q4, get.ests = TRUE))
+```
+
+## Penalties from a two-dimensional scan
+
+```{r scantwo}
+perm.2dim <- scantwo(maize.mds, pheno.col = "PlantHeight", method = "hk",
+                     n.perm = 1000, verbose = FALSE)
+penalties <- calc.penalties(perm.2dim)
+penalties
+```
+
+## Forward/backward stepwise search
+
+```{r stepwise}
+maize.step <- stepwiseqtl(maize.mds, pheno.col = "PlantHeight", max.qtl = 6,
+                          method = "hk", penalties = penalties, verbose = FALSE)
+maize.step
+```
+
+## Final six-QTL model and interactions
+
+```{r final}
+maize.qtl3 <- makeqtl(maize.mds, chr = c(2, 6, 7, 7, 8, 10),
+                      pos = c(78.0, 81.7, 51.0, 111.1, 60.6, 69.4))
+f6 <- y ~ Q1 + Q2 + Q3 + Q4 + Q5 + Q6
+maize.ref3 <- refineqtl(maize.mds, pheno.col = "PlantHeight", qtl = maize.qtl3,
+                        formula = f6, verbose = FALSE)
+plotLodProfile(maize.ref3)
+addint(maize.mds, pheno.col = "PlantHeight", qtl = maize.ref3, formula = f6)
+summary(fitqtl(maize.mds, pheno.col = "PlantHeight", qtl = maize.ref3,
+               formula = f6, get.ests = TRUE))
+```
+
+```{r two-scan}
+maize.mds <- calc.genoprob(maize.mds, step = 2)
+maize.two <- scantwo(maize.mds, pheno.col = "PlantHeight", method = "hk", verbose = FALSE)
+plot(maize.two, col.scheme = "redblue")
+summary(maize.two)
+```
+
+# Session info
+
+```{r session, echo = FALSE, eval = TRUE}
+sessionInfo()
+```
