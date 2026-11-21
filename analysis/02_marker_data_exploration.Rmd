@@ -1,0 +1,99 @@
+---
+title: "Exploring Marker Data in a Mouse Backcross"
+subtitle: "Genotype heatmaps, loops and single-marker regression"
+author: "Laide Abbas Rasaki"
+date: "First written March 2022 · revised November 2026"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Data
+
+The data come from a mouse **backcross** with 103 individuals. Each was genotyped at 14 markers (M1-M14) along one chromosome and weighed (body weight, `BW`). In a backcross each marker has only two genotype classes, coded here as 0 and 1.
+
+The first row of the file is a placeholder with no body weight, so it is dropped.
+
+```{r load}
+mouse <- read.csv("../data/mouse.csv")
+mouse <- mouse[-1, ]
+markers <- paste0("M", 1:14)
+dim(mouse)
+head(mouse)
+```
+
+# Genotype heatmap
+
+Each column of the image is an individual and each row a marker. Long runs of one colour are chromosome segments inherited intact. A colour change marks a **crossover** between two neighbouring markers.
+
+```{r heatmap, fig.width = 8, fig.height = 4}
+image(as.matrix(mouse[, markers]),
+      col = c("#d7191c", "#2c7bb6"),
+      main = "Mouse backcross: genotypes at 14 markers",
+      xlab = "Individual", ylab = "Marker", axes = FALSE)
+```
+
+# Genotype counts: `for` and `while` loops
+
+Both loops print the genotype frequencies at each marker, so you can see the same task written two ways.
+
+```{r loops}
+for (m in markers) {
+  cat(m, ":", table(mouse[[m]]), "\n")
+}
+
+i <- 1
+while (i <= length(markers)) {
+  cat(markers[i], ":", table(mouse[[markers[i]]]), "\n")
+  i <- i + 1
+}
+```
+
+The vectorised alternative returns the same counts as one tidy table:
+
+```{r sapply}
+t(sapply(mouse[, markers], table))
+```
+
+# Single-marker regression
+
+Is body weight associated with the genotype at M1? A linear model `BW ~ M1` tests whether the two genotype classes differ in mean weight.
+
+```{r regression}
+reg1 <- lm(BW ~ M1, data = mouse)
+summary(reg1)
+```
+
+```{r boxplot, fig.width = 5, fig.height = 4}
+boxplot(BW ~ M1, data = mouse,
+        names = c("M1 = 0", "M1 = 1"),
+        col = c("#fdae61", "#abd9e9"),
+        ylab = "Body weight", main = "Body weight by M1 genotype")
+```
+
+Repeating the test at every marker gives a simple genome scan. This is the idea behind *single-marker analysis* in QTL mapping (see report 04).
+
+```{r scan, fig.width = 7, fig.height = 4}
+p_values <- sapply(markers, function(m) {
+  anova(lm(mouse$BW ~ mouse[[m]]))[["Pr(>F)"]][1]
+})
+
+plot(seq_along(markers), -log10(p_values), type = "b", pch = 19,
+     xaxt = "n", xlab = "Marker", ylab = expression(-log[10](p)),
+     main = "Single-marker scan for body weight")
+axis(1, at = seq_along(markers), labels = markers, las = 2)
+abline(h = -log10(0.05 / length(markers)), col = "red", lty = 2)
+legend("topright", "Bonferroni 5 %", col = "red", lty = 2, bty = "n")
+```
+
+# Session info
+
+```{r session, echo = FALSE}
+sessionInfo()
+```
