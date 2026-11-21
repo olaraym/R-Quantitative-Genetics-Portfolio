@@ -1,0 +1,125 @@
+---
+title: "R Fundamentals and Data Wrangling"
+subtitle: "Vectors, indexing, logical selection, data import and dplyr"
+author: "Laide Abbas Rasaki"
+date: "First written March 2022 · revised November 2026"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    df_print: paged
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(dplyr)
+```
+
+This notebook works through core base-R skills, from building vectors to filtering a real data frame. These are the same operations used daily on breeding data: selecting genotypes, subsetting trials and summarising traits.
+
+# 1. Creating vectors
+
+**Task:** create the vector (4, 5, 6) in three different ways.
+
+`c()` combines values, `seq()` builds a regular sequence and `:` is shorthand for a step-1 sequence.
+
+```{r vectors}
+A <- c(4, 5, 6)
+B <- seq(from = 4, to = 6, by = 1)
+C <- 4:6
+identical(A, B) && identical(as.numeric(C), A)
+```
+
+**Task:** create (2, 2, 1, 1) in at least two ways.
+
+```{r repeat}
+s <- c(2, 2, 1, 1)
+d <- rep(c(2, 1), each = 2)
+d
+identical(s, d)
+```
+
+# 2. Indexing and logical selection
+
+**Task:** create `y` counting down from 10 to 1 and extract the 2nd, 5th and 7th elements.
+
+Square brackets `[]` *index* a vector by position.
+
+```{r indexing}
+y <- seq(10, 1, by = -1)
+y[c(2, 5, 7)]
+```
+
+**Task:** find the numbers in `y` whose double is greater than 15.
+
+A comparison returns a logical vector, and that vector can be used directly as an index.
+
+```{r logical}
+z <- y * 2
+z > 15          # logical mask
+y[z > 15]       # the values of y that satisfy the condition
+```
+
+# 3. Importing and inspecting data
+
+The `Students` data set has 200 rows and 13 variables. The original Excel file was saved as CSV and read with `read.csv()`.
+
+```{r import}
+students <- read.csv("../data/Students.csv")
+str(students)
+```
+
+**Task:** extract the 2nd, 5th and 10th values of `math`.
+
+```{r extract}
+students$math[c(2, 5, 10)]
+```
+
+## Handling missing-value codes
+
+Some fields use `-99` to mean "missing". If left as numbers, they would drag every mean down. Converting them to `NA` first is the safe way to compute summaries.
+
+```{r missing}
+colSums(students == -99, na.rm = TRUE)[colSums(students == -99, na.rm = TRUE) > 0]
+
+students <- students %>%
+  mutate(across(where(is.numeric), ~ na_if(.x, -99)))
+
+summarise(students, across(c(read, write, math, science, socst), ~ mean(.x, na.rm = TRUE)))
+```
+
+# 4. Building a new data frame
+
+**Task:** create `tests` with `math`, `read` and `write`, then add each student's mean score.
+
+```{r tests}
+tests <- students %>%
+  select(math, read, write) %>%
+  mutate(test_mean = rowMeans(across(everything())))
+
+head(tests, 5)
+```
+
+# 5. Filtering with dplyr
+
+**Task:** split students by reading score.
+
+* `low_read`: read ≤ 50
+* `mid_read`: 50 < read ≤ 60
+
+```{r filter}
+low_read <- filter(students, read <= 50)
+mid_read <- filter(students, read > 50, read <= 60)
+
+tibble(group = c("low_read (≤ 50)", "mid_read (51-60)"),
+       students = c(nrow(low_read), nrow(mid_read)))
+```
+
+The upper bound of `mid_read` is inclusive (`<= 60`), so students who scored exactly 60 are counted.
+
+# Session info
+
+```{r session, echo = FALSE}
+sessionInfo()
+```
