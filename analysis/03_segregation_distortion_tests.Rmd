@@ -1,0 +1,107 @@
+---
+title: "Segregation Distortion in Mapping Populations"
+subtitle: "Chi-square goodness-of-fit tests with Bonferroni correction"
+author: "Laide Abbas Rasaki"
+date: "First written March 2022 · revised November 2026"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Why test segregation?
+
+Before building a genetic map, each marker should segregate in the ratio that Mendelian inheritance predicts for that population type:
+
+| Population | Genotype classes | Expected ratio |
+|---|---|---|
+| Backcross (mouse) | 0, 1 | 1 : 1 |
+| F2 intercross (maize) | 0, 1, 2 | 1 : 2 : 1 |
+
+Markers that deviate show **segregation distortion**. This can come from genotyping errors, selection against an allele, or linkage to a gene affecting viability. Distorted markers can bias recombination estimates, so they are flagged before mapping.
+
+Testing many markers inflates false positives, so results are shown at both α = 0.05 and the Bonferroni-corrected α / *m*, where *m* is the number of markers.
+
+# A reusable test function
+
+Both populations use the same steps, so the test is written once as a function.
+
+```{r function}
+segregation_test <- function(genotypes, expected) {
+  res <- t(sapply(genotypes, function(g) {
+    obs  <- table(factor(g, levels = seq_along(expected) - 1))
+    test <- chisq.test(x = obs, p = expected)
+    c(obs, chisq = unname(test$statistic), p = test$p.value)
+  }))
+  as.data.frame(res)
+}
+
+plot_pvalues <- function(p, m, title) {
+  plot(sort(p), pch = 19, ylab = "p-value (sorted)", xlab = "Marker rank", main = title)
+  abline(h = c(0.05, 0.05 / m), col = c("red", "blue"), lty = c(2, 1))
+  legend("topleft", c("α = 0.05", paste0("α* = 0.05/", m)),
+         col = c("red", "blue"), lty = c(2, 1), bty = "n")
+}
+```
+
+# Mouse backcross (expected 1 : 1)
+
+```{r mouse}
+mouse <- read.csv("../data/mouse.csv")
+mouse <- mouse[-1, ]                       # drop placeholder row
+mouse_geno <- mouse[, setdiff(names(mouse), "BW")]
+
+mouse_res <- segregation_test(mouse_geno, expected = c(0.5, 0.5))
+knitr::kable(mouse_res, digits = 3, caption = "Mouse markers: observed counts and chi-square test")
+```
+
+```{r mouse-summary}
+m_mouse <- ncol(mouse_geno)
+c(`p < 0.05` = sum(mouse_res$p < 0.05),
+  `p < Bonferroni` = sum(mouse_res$p < 0.05 / m_mouse))
+```
+
+```{r mouse-plots, fig.width = 10, fig.height = 4}
+par(mfrow = c(1, 2))
+image(as.matrix(mouse_geno), col = c("#fee08b", "#3288bd"),
+      main = "Mouse genotypes", xlab = "Individual", ylab = "Marker", axes = FALSE)
+plot_pvalues(mouse_res$p, m_mouse, "Mouse: chi-square p-values")
+```
+
+# Maize F2 (expected 1 : 2 : 1)
+
+```{r maize}
+maize <- read.csv("../data/maize.csv")
+maize_geno <- maize[, grep("^M", names(maize))]  # keep markers, drop IND and GY
+
+maize_res <- segregation_test(maize_geno, expected = c(0.25, 0.5, 0.25))
+knitr::kable(maize_res, digits = 3, caption = "Maize markers: observed counts and chi-square test")
+```
+
+```{r maize-summary}
+m_maize <- ncol(maize_geno)
+c(`p < 0.05` = sum(maize_res$p < 0.05),
+  `p < Bonferroni` = sum(maize_res$p < 0.05 / m_maize))
+```
+
+```{r maize-plots, fig.width = 10, fig.height = 4}
+par(mfrow = c(1, 2))
+image(as.matrix(maize_geno), col = c("#fee08b", "#99d594", "#3288bd"),
+      main = "Maize F2 genotypes", xlab = "Individual", ylab = "Marker", axes = FALSE)
+plot_pvalues(maize_res$p, m_maize, "Maize: chi-square p-values")
+```
+
+# Interpretation
+
+The tables and counts above show, for each population, how many markers deviate from the expected ratio at the nominal and the Bonferroni-corrected thresholds. Markers that pass the corrected test can be used for linkage mapping. Any that fail should be checked for genotyping errors before they are kept.
+
+# Session info
+
+```{r session, echo = FALSE}
+sessionInfo()
+```
