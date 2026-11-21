@@ -37,3 +37,10 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Rendered reports (built by GitHub Actions, not committed)
+_site/
+analysis/*.html
+analysis/*_files/
+*.RData
+!data/maize_mds.RData
